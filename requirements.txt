@@ -1,0 +1,10 @@
+docling
+chromadb
+sentence-transformers
+rank_bm25
+streamlit
+openai
+anthropic
+google-generativeai
+python-dotenv
+langchain-text-splitters

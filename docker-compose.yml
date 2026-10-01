@@ -1,0 +1,15 @@
+services:
+  hybrid-rag-support:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hybrid_rag_app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    restart: unless-stopped
