@@ -143,12 +143,3 @@ HybridRAG/
    ```
 3. Open `http://localhost:8501` in your browser.
 
----
-
-## Resume Bullet Points
-
-> **Hybrid-RAG Policy Retrieval Engine** | *Python, ChromaDB, Sentence-Transformers, Rank-BM25, Docling, Streamlit, Docker*
-> - Engineered an enterprise two-stage Hybrid-RAG pipeline combining dense vector embeddings (`all-MiniLM-L6-v2`) and sparse keyword matching (`BM25Okapi`) merged via Reciprocal Rank Fusion (RRF, $k=60$).
-> - Integrated a local Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) re-ranking step to filter candidate pool from Top-20 to Top-5, achieving **100% Hit Rate@3** and boosting **MRR from 0.708 to 0.875** over standalone vector search.
-> - Implemented table-aware PDF parsing with Docling, preserving structured tabular data and eliminating numerical hallucinations on multi-tier financial/travel rate caps.
-> - Containerized the application with Docker Compose and built an automated evaluation harness (`eval.py`) benchmarking Information Retrieval (IR) metrics across 4 search strategies.
