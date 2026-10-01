@@ -6,7 +6,7 @@ from retrieval import get_hybrid_results, rerank_results, generate_answer
 
 st.set_page_config(page_title="Hybrid-RAG Support Desk", layout="wide", initial_sidebar_state="expanded")
 
-st.title("Hybrid-RAG Support Desk 🤖")
+st.title("Hybrid-RAG Support Desk")
 
 with st.sidebar:
     st.header("Configuration")
