@@ -88,22 +88,11 @@ def rerank_results(query, chunks, top_n=5):
     
     return [chunk for chunk, score in scored_chunks[:top_n]]
 
-def generate_answer(query, context_chunks, model_choice="claude"):
-    if not context_chunks:
-        return "I cannot answer this based on the provided documents as no relevant context was found."
-
-    context_str = "\n\n---\n\n".join(context_chunks)
-    
-    system_prompt = (
-        "You are a helpful Support Desk AI. Answer the user's question ONLY using the provided context. "
-        "If the answer is not in the context, say 'I cannot answer this based on the provided documents.'\n\n"
-        f"Context:\n{context_str}"
-    )
-    
+def _call_llm(user_prompt, system_prompt, model_choice):
     if model_choice.lower() == "gemini":
         api_key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not api_key:
-            return "Error: Gemini API Key is missing. Please enter your API Key in the sidebar."
+            raise ValueError("Gemini API Key is missing. Please enter your API Key in the sidebar.")
         
         genai.configure(api_key=api_key)
         
@@ -115,7 +104,6 @@ def generate_answer(query, context_chunks, model_choice="claude"):
         except Exception:
             pass
 
-        # Fallback names if list_models is restricted
         backups = [
             'gemini-1.5-flash-latest', 
             'gemini-2.0-flash', 
@@ -132,30 +120,79 @@ def generate_answer(query, context_chunks, model_choice="claude"):
         last_error = None
         for m_name in candidate_models:
             try:
-                model = genai.GenerativeModel(m_name, system_instruction=system_prompt)
-                response = model.generate_content(query)
+                if system_prompt:
+                    model = genai.GenerativeModel(m_name, system_instruction=system_prompt)
+                else:
+                    model = genai.GenerativeModel(m_name)
+                response = model.generate_content(user_prompt)
                 return response.text
             except Exception as e:
                 last_error = e
                 continue
                 
-        return f"Gemini API Error: {str(last_error)}. Please check that your API key is valid."
+        raise ValueError(f"Gemini API Error: {str(last_error)}")
+        
     elif model_choice.lower() == "claude":
         client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": query}]
-        )
+        kwargs = {
+            "model": "claude-3-5-sonnet-20240620",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": user_prompt}]
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+        response = client.messages.create(**kwargs)
         return response.content[0].text
+        
     else:
         openai.api_key = os.environ.get("OPENAI_API_KEY")
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+        
         response = openai.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query}
-            ]
+            messages=messages
         )
         return response.choices[0].message.content
+
+def condense_query(query, chat_history, model_choice="claude"):
+    if not chat_history or len(chat_history) == 0:
+        return query
+        
+    history_str = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in chat_history])
+    
+    prompt = (
+        "Given the following conversation history and a follow up user input, "
+        "rephrase the follow up input to be a standalone search query. "
+        "If the follow up input is already standalone, return it exactly as is. "
+        "Do NOT answer the question, just return the standalone query. "
+        "Return ONLY the plain text query, no quotes and no explanation.\n\n"
+        f"Chat History:\n{history_str}\n\n"
+        f"Follow Up Input: {query}\n"
+        "Standalone Query:"
+    )
+    
+    try:
+        standalone_query = _call_llm(prompt, system_prompt=None, model_choice=model_choice)
+        return standalone_query.strip()
+    except Exception:
+        return query
+
+def generate_answer(query, context_chunks, model_choice="claude"):
+    if not context_chunks:
+        return "I cannot answer this based on the provided documents as no relevant context was found."
+
+    context_str = "\n\n---\n\n".join(context_chunks)
+    
+    system_prompt = (
+        "You are a helpful Support Desk AI. Answer the user's question ONLY using the provided context. "
+        "If the answer is not in the context, say 'I cannot answer this based on the provided documents.'\n\n"
+        f"Context:\n{context_str}"
+    )
+    
+    try:
+        return _call_llm(query, system_prompt, model_choice)
+    except Exception as e:
+        return str(e)

@@ -14,6 +14,7 @@ ENV/
 data/
 *.pkl
 *.sqlite3
+*.pdf
 
 # Python bytecode & cache
 __pycache__/

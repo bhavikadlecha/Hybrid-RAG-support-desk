@@ -73,6 +73,10 @@ The project includes an automated evaluation harness (`eval.py`) measuring Hit R
 * Standard parsers (e.g., `PyPDF2`, `pdfplumber`) linearize tables into disjointed text streams, scrambling column relationships.
 * **Docling** parses bounding boxes and table layouts into structured Markdown tables, preserving multi-tier rate caps, numerical thresholds, and approval matrices.
 
+### 4. Conversational Memory & Query Condensation
+* **Problem:** In a chat interface, users ask follow-up questions containing pronouns or implicit context (e.g., "Does it apply to contractors?"). Standard retrieval engines fail because the term "it" lacks vector semantic meaning.
+* **Solution:** A pre-processing LLM call rewrites the user's raw input against the chat history to generate a standalone, highly specific search query before running the vector search.
+
 ---
 
 ## Project Structure

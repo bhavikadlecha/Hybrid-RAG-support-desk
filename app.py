@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import tempfile
 from ingest import ingest_pdf, clear_database
-from retrieval import get_hybrid_results, rerank_results, generate_answer
+from retrieval import get_hybrid_results, rerank_results, generate_answer, condense_query
 
 st.set_page_config(page_title="Hybrid-RAG Support Desk", layout="wide", initial_sidebar_state="expanded")
 
@@ -63,6 +63,7 @@ if query := st.chat_input("Ask a question about the uploaded policies..."):
     if not api_key:
         st.error(f"Please provide your {model_choice} API Key in the sidebar.")
     else:
+        chat_history = list(st.session_state.messages)
         st.session_state.messages.append({"role": "user", "content": query})
         with st.chat_message("user"):
             st.markdown(query)
@@ -70,13 +71,19 @@ if query := st.chat_input("Ask a question about the uploaded policies..."):
         with st.chat_message("assistant"):
             with st.spinner("Retrieving and generating answer..."):
                 try:
-                    hybrid_chunks = get_hybrid_results(query, top_k=20)
+                    search_query = query
+                    if chat_history:
+                        search_query = condense_query(query, chat_history, model_choice)
+                        if search_query != query:
+                            st.caption(f"*(Rewrote query for context: {search_query})*")
+                            
+                    hybrid_chunks = get_hybrid_results(search_query, top_k=20)
                     
                     if not hybrid_chunks:
                         st.warning("No documents found. Please upload and process a document first.")
                     else:
-                        top_5_chunks = rerank_results(query, hybrid_chunks, top_n=5)
-                        answer = generate_answer(query, top_5_chunks, model_choice)
+                        top_5_chunks = rerank_results(search_query, hybrid_chunks, top_n=5)
+                        answer = generate_answer(search_query, top_5_chunks, model_choice)
                         
                         st.markdown(answer)
                         with st.expander("View Retrieved Context (Top 5)"):
