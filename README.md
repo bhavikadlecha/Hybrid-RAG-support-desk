@@ -77,6 +77,10 @@ The project includes an automated evaluation harness (`eval.py`) measuring Hit R
 * **Problem:** In a chat interface, users ask follow-up questions containing pronouns or implicit context (e.g., "Does it apply to contractors?"). Standard retrieval engines fail because the term "it" lacks vector semantic meaning.
 * **Solution:** A pre-processing LLM call rewrites the user's raw input against the chat history to generate a standalone, highly specific search query before running the vector search.
 
+### 5. Parent-Child Chunking (Small-to-Big Retrieval)
+* **Problem:** Large chunks (e.g., 2000 chars) provide great context for the LLM but dilute the semantic density, lowering retrieval accuracy. Small chunks (e.g., 400 chars) retrieve with high precision but lack surrounding context, causing the LLM to hallucinate or give incomplete answers.
+* **Solution:** The ingestion pipeline splits documents into large "Parent" chunks, and then subdivides those into small "Child" chunks. The Vector Database and BM25 index only the small Child chunks. At retrieval time, the top-matching Child chunks are resolved to their unique Parent chunks, and the broader Parent chunks are passed to the Cross-Encoder and LLM.
+
 ---
 
 ## Project Structure

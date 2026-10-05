@@ -49,7 +49,7 @@ def get_hybrid_results(query, top_k=20):
     with open(BM25_PATH, 'rb') as f:
         bm25 = pickle.load(f)
     with open(CHUNKS_PATH, 'rb') as f:
-        all_chunks = pickle.load(f)
+        all_child_data = pickle.load(f)
         
     # Keyword Search
     tokenized_query = query.lower().split(" ")
@@ -57,7 +57,7 @@ def get_hybrid_results(query, top_k=20):
     
     import numpy as np
     top_n_indices = np.argsort(bm25_scores)[::-1][:top_k]
-    bm25_chunks = [all_chunks[i] for i in top_n_indices]
+    bm25_chunks = [all_child_data[i]["text"] for i in top_n_indices]
     
     # RRF
     rrf_chunks = reciprocal_rank_fusion(semantic_chunks, bm25_chunks)
@@ -71,22 +71,49 @@ def get_cross_encoder():
         _CROSS_ENCODER = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512)
     return _CROSS_ENCODER
 
-def rerank_results(query, chunks, top_n=5):
-    if not chunks:
+def rerank_results(query, child_texts, top_n=5):
+    if not child_texts:
         return []
     
     # Use cached Cross-Encoder
     model = get_cross_encoder()
     
     # Score chunks
-    pairs = [[query, chunk] for chunk in chunks]
+    pairs = [[query, chunk] for chunk in child_texts]
     scores = model.predict(pairs)
     
     # Sort chunks by score
-    scored_chunks = list(zip(chunks, scores))
+    scored_chunks = list(zip(child_texts, scores))
     scored_chunks.sort(key=lambda x: x[1], reverse=True)
+    sorted_child_texts = [chunk for chunk, score in scored_chunks]
     
-    return [chunk for chunk, score in scored_chunks[:top_n]]
+    # Parent mapping
+    PARENTS_PATH = os.path.join(DATA_DIR, "parents.pkl")
+    if not os.path.exists(PARENTS_PATH) or not os.path.exists(CHUNKS_PATH):
+        return sorted_child_texts[:top_n]
+        
+    with open(CHUNKS_PATH, 'rb') as f:
+        all_child_data = pickle.load(f)
+    with open(PARENTS_PATH, 'rb') as f:
+        all_parents = pickle.load(f)
+        
+    child_to_parent_id = {item["text"]: item["parent_id"] for item in all_child_data}
+    
+    unique_parents = []
+    seen_parent_ids = set()
+    
+    for c_text in sorted_child_texts:
+        p_id = child_to_parent_id.get(c_text)
+        if p_id and p_id not in seen_parent_ids:
+            seen_parent_ids.add(p_id)
+            parent_text = all_parents.get(p_id)
+            if parent_text:
+                unique_parents.append(parent_text)
+                
+        if len(unique_parents) >= top_n:
+            break
+            
+    return unique_parents
 
 def _call_llm(user_prompt, system_prompt, model_choice):
     if model_choice.lower() == "gemini":

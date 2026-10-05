@@ -22,9 +22,10 @@ collection = chroma_client.get_collection(name="support_docs", embedding_functio
 with open(BM25_PATH, 'rb') as f:
     bm25 = pickle.load(f)
 with open(CHUNKS_PATH, 'rb') as f:
-    all_chunks = pickle.load(f)
+    all_child_data = pickle.load(f)
 
-cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512)
+# Note: We do not need a separate CrossEncoder instantiation here since we will use retrieval.rerank_results
+from retrieval import rerank_results
 
 # 2. Define Search Strategies
 def search_vector(query, top_k=20):
@@ -35,7 +36,7 @@ def search_bm25(query, top_k=20):
     tokenized_query = query.lower().split(" ")
     scores = bm25.get_scores(tokenized_query)
     top_indices = np.argsort(scores)[::-1][:top_k]
-    return [all_chunks[i] for i in top_indices]
+    return [all_child_data[i]["text"] for i in top_indices]
 
 def search_hybrid_rrf(query, top_k=20, k_rrf=60):
     vec_chunks = search_vector(query, top_k=top_k)
@@ -56,10 +57,8 @@ def search_hybrid_crossencoder(query, top_k_retrieval=20, top_n_rerank=5):
     if not candidate_chunks:
         return []
     
-    pairs = [[query, chunk] for chunk in candidate_chunks]
-    scores = cross_encoder.predict(pairs)
-    scored = sorted(zip(candidate_chunks, scores), key=lambda x: x[1], reverse=True)
-    return [chunk for chunk, _ in scored[:top_n_rerank]]
+    # Delegate to the centralized reranker which also performs Parent-Child resolution
+    return rerank_results(query, candidate_chunks, top_n=top_n_rerank)
 
 # 3. Ground-Truth Benchmark Test Suite (Representative policy queries)
 BENCHMARK_DATASET = [
