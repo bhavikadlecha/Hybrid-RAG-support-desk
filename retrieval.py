@@ -1,5 +1,8 @@
 import os
 import pickle
+from typing import Optional, Any
+
+import numpy as np
 import chromadb
 from chromadb.utils import embedding_functions
 from sentence_transformers import CrossEncoder
@@ -13,8 +16,19 @@ DB_DIR = os.path.join(DATA_DIR, "chroma_db")
 BM25_PATH = os.path.join(DATA_DIR, "bm25_index.pkl")
 CHUNKS_PATH = os.path.join(DATA_DIR, "chunks.pkl")
 
-def reciprocal_rank_fusion(semantic_results, bm25_results, k=60):
-    rrf_scores = {}
+def reciprocal_rank_fusion(semantic_results: list[str], bm25_results: list[str], k: int = 60) -> list[str]:
+    """
+    Fuses two lists of ranked items using the Reciprocal Rank Fusion (RRF) algorithm.
+    
+    Args:
+        semantic_results (list[str]): Results retrieved via dense vector search.
+        bm25_results (list[str]): Results retrieved via sparse keyword search.
+        k (int): Smoothing constant.
+        
+    Returns:
+        list[str]: A unified list of items ranked by fused score.
+    """
+    rrf_scores: dict[str, float] = {}
     
     for rank, chunk in enumerate(semantic_results):
         if chunk not in rrf_scores:
@@ -29,7 +43,17 @@ def reciprocal_rank_fusion(semantic_results, bm25_results, k=60):
     sorted_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
     return [chunk for chunk, score in sorted_results]
 
-def get_hybrid_results(query, top_k=20):
+def get_hybrid_results(query: str, top_k: int = 20) -> list[str]:
+    """
+    Executes a hybrid search query across ChromaDB and BM25, fusing the results via RRF.
+    
+    Args:
+        query (str): The search query.
+        top_k (int): Number of top results to return.
+        
+    Returns:
+        list[str]: The top hybrid search results (child chunks).
+    """
     if not os.path.exists(DB_DIR):
         return []
 
@@ -55,7 +79,6 @@ def get_hybrid_results(query, top_k=20):
     tokenized_query = query.lower().split(" ")
     bm25_scores = bm25.get_scores(tokenized_query)
     
-    import numpy as np
     top_n_indices = np.argsort(bm25_scores)[::-1][:top_k]
     bm25_chunks = [all_child_data[i]["text"] for i in top_n_indices]
     
@@ -65,13 +88,27 @@ def get_hybrid_results(query, top_k=20):
 
 _CROSS_ENCODER = None
 
-def get_cross_encoder():
+def get_cross_encoder() -> CrossEncoder:
+    """
+    Returns a cached instance of the CrossEncoder model to avoid reloading.
+    """
     global _CROSS_ENCODER
     if _CROSS_ENCODER is None:
         _CROSS_ENCODER = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512)
     return _CROSS_ENCODER
 
-def rerank_results(query, child_texts, top_n=5):
+def rerank_results(query: str, child_texts: list[str], top_n: int = 5) -> list[str]:
+    """
+    Re-ranks a list of child chunks using a Cross-Encoder and resolves them to their parent chunks.
+    
+    Args:
+        query (str): The user query.
+        child_texts (list[str]): The candidate child chunks from hybrid search.
+        top_n (int): Number of top parent chunks to return.
+        
+    Returns:
+        list[str]: The top re-ranked parent chunks.
+    """
     if not child_texts:
         return []
     
@@ -115,7 +152,10 @@ def rerank_results(query, child_texts, top_n=5):
             
     return unique_parents
 
-def _call_llm(user_prompt, system_prompt, model_choice):
+def _call_llm(user_prompt: str, system_prompt: Optional[str], model_choice: str) -> str:
+    """
+    Helper function to abstract LLM calls across multiple providers (Gemini, Claude, OpenAI).
+    """
     if model_choice.lower() == "gemini":
         api_key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not api_key:
@@ -184,7 +224,10 @@ def _call_llm(user_prompt, system_prompt, model_choice):
         )
         return response.choices[0].message.content
 
-def condense_query(query, chat_history, model_choice="claude"):
+def condense_query(query: str, chat_history: list[dict[str, str]], model_choice: str = "claude") -> str:
+    """
+    Rewrites a user's follow-up query into a standalone search query based on chat history.
+    """
     if not chat_history or len(chat_history) == 0:
         return query
         
@@ -207,7 +250,10 @@ def condense_query(query, chat_history, model_choice="claude"):
     except Exception:
         return query
 
-def generate_answer(query, context_chunks, model_choice="claude"):
+def generate_answer(query: str, context_chunks: list[str], model_choice: str = "claude") -> str:
+    """
+    Generates a final answer grounded strictly in the provided context chunks.
+    """
     if not context_chunks:
         return "I cannot answer this based on the provided documents as no relevant context was found."
 

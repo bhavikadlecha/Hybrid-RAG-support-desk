@@ -1,6 +1,8 @@
 import os
 import time
 import pickle
+from typing import Callable, Any
+
 import numpy as np
 import chromadb
 from chromadb.utils import embedding_functions
@@ -28,17 +30,20 @@ with open(CHUNKS_PATH, 'rb') as f:
 from retrieval import rerank_results
 
 # 2. Define Search Strategies
-def search_vector(query, top_k=20):
+def search_vector(query: str, top_k: int = 20) -> list[str]:
+    """Retrieves top_k document chunks using dense vector embeddings."""
     res = collection.query(query_texts=[query], n_results=top_k)
     return res['documents'][0] if res['documents'] else []
 
-def search_bm25(query, top_k=20):
+def search_bm25(query: str, top_k: int = 20) -> list[str]:
+    """Retrieves top_k document chunks using sparse BM25 keyword matching."""
     tokenized_query = query.lower().split(" ")
     scores = bm25.get_scores(tokenized_query)
     top_indices = np.argsort(scores)[::-1][:top_k]
     return [all_child_data[i]["text"] for i in top_indices]
 
-def search_hybrid_rrf(query, top_k=20, k_rrf=60):
+def search_hybrid_rrf(query: str, top_k: int = 20, k_rrf: int = 60) -> list[str]:
+    """Combines vector and keyword search using Reciprocal Rank Fusion."""
     vec_chunks = search_vector(query, top_k=top_k)
     bm25_chunks = search_bm25(query, top_k=top_k)
     
@@ -52,7 +57,8 @@ def search_hybrid_rrf(query, top_k=20, k_rrf=60):
     sorted_chunks = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
     return [chunk for chunk, _ in sorted_chunks[:top_k]]
 
-def search_hybrid_crossencoder(query, top_k_retrieval=20, top_n_rerank=5):
+def search_hybrid_crossencoder(query: str, top_k_retrieval: int = 20, top_n_rerank: int = 5) -> list[str]:
+    """Retrieves candidates via hybrid search and re-ranks them using a Cross-Encoder."""
     candidate_chunks = search_hybrid_rrf(query, top_k=top_k_retrieval)
     if not candidate_chunks:
         return []
@@ -97,7 +103,8 @@ BENCHMARK_DATASET = [
 ]
 
 # 4. Evaluation Engine
-def evaluate_strategy(name, search_fn, is_reranked=False):
+def evaluate_strategy(name: str, search_fn: Callable[[str], list[str]], is_reranked: bool = False) -> dict[str, Any]:
+    """Runs the benchmark dataset against a given search strategy and computes MRR/Hit Rates."""
     hit_1 = 0
     hit_3 = 0
     hit_5 = 0
@@ -140,7 +147,8 @@ def evaluate_strategy(name, search_fn, is_reranked=False):
         "avg_latency_ms": np.mean(latencies)
     }
 
-def run_benchmark():
+def run_benchmark() -> None:
+    """Executes all defined search strategies against the benchmark and outputs markdown results."""
     print("\n" + "="*80)
     print("RUNNING HYBRID-RAG RETRIEVAL BENCHMARK EVALUATION")
     print(f"Total Benchmark Queries: {len(BENCHMARK_DATASET)}")

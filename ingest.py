@@ -1,6 +1,8 @@
 import os
 import pickle
+import shutil
 import chromadb
+from chromadb.utils import embedding_functions
 from docling.document_converter import DocumentConverter
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from rank_bm25 import BM25Okapi
@@ -12,14 +14,22 @@ BM25_PATH = os.path.join(DATA_DIR, "bm25_index.pkl")
 CHUNKS_PATH = os.path.join(DATA_DIR, "child_chunks.pkl")
 PARENTS_PATH = os.path.join(DATA_DIR, "parents.pkl")
 
-def clear_database():
-    import shutil
+def clear_database() -> None:
+    """Removes all existing vectorized data and indices to ensure a clean slate."""
     if os.path.exists(DATA_DIR):
         shutil.rmtree(DATA_DIR)
     os.makedirs(DATA_DIR, exist_ok=True)
     print("Database and indices cleared.")
 
-def ingest_pdf(pdf_path, reset_existing=False):
+def ingest_pdf(pdf_path: str, reset_existing: bool = False) -> None:
+    """
+    Parses a PDF document, chunks it into parent and child chunks, and
+    embeds it into both a dense ChromaDB vector store and a sparse BM25 index.
+    
+    Args:
+        pdf_path (str): The absolute or relative path to the PDF file.
+        reset_existing (bool): If True, deletes existing indexes before ingestion.
+    """
     if reset_existing:
         clear_database()
     print(f"Ingesting {pdf_path}...")
@@ -61,7 +71,6 @@ def ingest_pdf(pdf_path, reset_existing=False):
     # 3. Vector DB Setup (ChromaDB)
     chroma_client = chromadb.PersistentClient(path=DB_DIR)
     
-    from chromadb.utils import embedding_functions
     sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
     
     collection = chroma_client.get_or_create_collection(
